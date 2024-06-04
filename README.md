@@ -27,3 +27,13 @@ Use strategy pattern to adapt to different page settings and layouts.
 * This script uses Pixiv's dynamic loading mechanism, so you need to keep the Pixiv page in view.
 * Do not open developer tools or resize the window during the script's execution.
   Doing so may prevent some thumbnails from loading, causing the script to get stuck until it captures all thumbnails on the page.
+
+## Notes
+* This script uses Pixiv's dynamic loading mechanism, so you need to keep the Pixiv page in view.
+* Do not open developer tools or resize the window during the script's execution.
+  Doing so may prevent some thumbnails from loading, causing the script to get stuck until it captures all thumbnails on the page.
+
+## F&Q
+* Why not use the same API to get thumb?
+Use API to get thumb will hit the API access limit and require an interval(or at least some kind of error).
+Several methods have been tried so far, but none of them are as stable or fast as using Pixiv's built-in mechanism.
