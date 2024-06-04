@@ -5,7 +5,7 @@ artist illustrations, and tag illustrations pages.
 
 ## Features
 Use strategy pattern to adapt to different page settings and layouts.
-* Added functions such as sorting by number of likes.
+* Sorting by number of likes.
 * Displaying thresholds for number of likes.
 * Resetting thresholds.
 * Returning to the number of pages before sorting.
