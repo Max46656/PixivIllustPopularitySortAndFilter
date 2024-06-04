@@ -7,7 +7,7 @@ artist illustrations, and tag illustrations pages.
 Use strategy pattern to adapt to different page settings and layouts.
 * Sorting by number of likes.
 * Displaying thresholds for number of likes.
-* Resetting thresholds.
+* Resetting thresholds and display illustration again.
 * Returning to the number of pages before sorting.
 * Setting the number of columns in the work table.
 * Added fool-proof design, no errors will appear on the last page.
@@ -22,3 +22,8 @@ Use strategy pattern to adapt to different page settings and layouts.
 2. In Pixiv page,Set the number of pages processed and the favorite threshold.
 3. StartButton will prompt you with the favorite threshold and the number of pages processed.
 4. Click "GO!".
+
+## Notes
+* This script uses Pixiv's dynamic loading mechanism, so you need to keep the Pixiv page in view.
+* Do not open developer tools or resize the window during the script's execution.
+  Doing so may prevent some thumbnails from loading, causing the script to get stuck until it captures all thumbnails on the page.
