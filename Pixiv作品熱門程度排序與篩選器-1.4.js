@@ -7,7 +7,7 @@
 // @description:ja  フォローアーティスト作品、アーティスト作品、タグ作品ページで、いいね數でソートし、閾値以上の作品のみを表示します。
 // @description:en  Sort Illustration by likes and display only those above the threshold on followed artist illustrations, artist illustrations, and tag illustrations pages.
 // @namespace    http://tampermonkey.net/
-// @version      1.4
+// @version      1.4.1
 // @author       Max
 // @match        https://www.pixiv.net/bookmark_new_illust.php*
 // @match        https://www.pixiv.net/users/*
@@ -149,7 +149,7 @@ class artScraper {
             // console.log(`Iteration ${i + 1}/${this.targetPages}`);
             const iterationStartTime = performance.now();
 
-            await this.delay(1000);
+            //await this.delay(1000);
             await this.getArtsInPage(thumbnailClass,artsClass);
             // 最後一頁的下一頁按鈕為隱藏
             let allPageNav=document.querySelectorAll("a.sc-xhhh7v-1-filterProps-Styled-Component");
