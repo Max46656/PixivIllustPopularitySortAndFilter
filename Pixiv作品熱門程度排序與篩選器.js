@@ -7,7 +7,7 @@
 // @description:ja  フォローアーティスト作品、アーティスト作品、タグ作品ページで、いいね數でソートし、閾値以上の作品のみを表示します。
 // @description:en  Sort Illustration by likes and display only those above the threshold on followed artist illustrations, artist illustrations, and tag illustrations pages.
 // @namespace    http://tampermonkey.net/
-// @version      1.4.1
+// @version      1.4.2
 // @author       Max
 // @match        https://www.pixiv.net/bookmark_new_illust.php*
 // @match        https://www.pixiv.net/users/*
@@ -641,7 +641,7 @@ class readingStand {
         const originalReplaceState = history.replaceState;
 
         function handleHistoryChange() {
-            readingStand.expandAllillustrations();
+            readingStand.expandAllArtworks();
         }
 
         history.pushState = function() {
