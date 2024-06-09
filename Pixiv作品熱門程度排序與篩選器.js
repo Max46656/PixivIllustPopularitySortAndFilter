@@ -7,12 +7,12 @@
 // @description:ja  フォローアーティスト作品、アーティスト作品、タグ作品ページで、いいね數でソートし、閾値以上の作品のみを表示します。
 // @description:en  Sort Illustration by likes and display only those above the threshold on followed artist illustrations, artist illustrations, and tag illustrations pages.
 // @namespace    http://tampermonkey.net/
-// @version      1.4.2
+// @version      1.5.1
 // @author       Max
 // @match        https://www.pixiv.net/bookmark_new_illust.php*
 // @match        https://www.pixiv.net/users/*
 // @match        https://www.pixiv.net/tags/*
-// @match        https://www.pixiv.net*
+// @match        https://www.pixiv.net/*
 // @icon         https://www.google.com/s2/favicons?sz=64&domain=pixiv.net
 // @grant        GM_registerMenuCommand
 // @grant        GM_setValue
@@ -23,7 +23,6 @@
 *提示文字多語言翻譯
 *userPage的AllButtonClass除了第一頁以外缺乏正確的css class設定
 */
-
 class pageStrategy {
     getThumbnailClass() {}
     getArtsClass() {}
@@ -108,13 +107,25 @@ class subStrategy extends pageStrategy{
 }
 
 class artScraper {
-    constructor(targetPages,likesMinLimit,strategy) {
+    constructor(targetPages,likesMinLimit) {
         this.domain = 'https://www.pixiv.net';
         this.allArts = new Set();
         this.targetPages = GM_getValue("targetPages", 10) || targetPages;
         this.likesMinLimit=GM_getValue("likesMinLimit", 50) || likesMinLimit;
-        this.strategy = strategy;
+        this.strategy = this.setStrategy();
         // console.log(strategy.getThumbnailClass(),strategy.getArtsClass(),strategy.getRenderArtWallClass(),strategy.getButtonAtClass(),strategy.getAllButtonClass())
+    }
+    setStrategy(){
+        const url = self.location.href;
+        if (url.includes('https://www.pixiv.net/bookmark_new_illust.php')) {
+            return new subStrategy();
+        } else if (url.match(/^https:\/\/www.pixiv.net\/users\/.*\/.*$/)) {
+            return new userStrategy();
+        } else if (url.match(/^https:\/\/www.pixiv.net\/tags\/.*\/.*$/)) {
+            return new tagsStrategy();
+        } else {
+            throw new Error('Unsupported page type');
+        }
     }
 
     async eatAllArts() {
@@ -126,8 +137,8 @@ class artScraper {
         await this.executeAndcountUpSec('renderArtWall', () => this.renderArtWall(renderArtWallAtClass));
         this.changeElementClassName(document.querySelector(this.strategy.getOutArtWallWayClass()),'sortArtWall');
         let buttonAtClass = this.strategy.getButtonAtClass();
-        this.addRestoreButton(buttonAtClass, strategy.getAllButtonClass()[1]);
-        this.addRerenderButton(renderArtWallAtClass, buttonAtClass, strategy.getAllButtonClass()[2]);
+        this.addRestoreButton(buttonAtClass, this.strategy.getAllButtonClass()[1]);
+        this.addRerenderButton(renderArtWallAtClass, buttonAtClass, this.strategy.getAllButtonClass()[2]);
 
         const endTime = performance.now();
         console.log(`總耗時: ${(endTime - startTime) / 1000} 秒`);
@@ -138,7 +149,7 @@ class artScraper {
         while (elements.length == 0) {
             await this.delay(50);
             elements = document.querySelectorAll(selector);
-            // console.log("selector",selector,elements)
+            console.log("selector",selector,"找不到，將重試")
         }
         return elements.length > 1 ? elements : elements[0];
     }
@@ -353,7 +364,6 @@ class artScraper {
         buttonContainer.className = 'startButton';
 
         const startButton = document.createElement('button');
-
         this.addLikeRangeInput(buttonContainer,startButton);
         await this.addPageRangeInput(buttonContainer,startButton);
 
@@ -434,42 +444,42 @@ class artScraper {
     }
 
     async addPageRangeInput(container, startButton) {
-    const pageIcon = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-    pageIcon.setAttribute("viewBox", "0 0 16 16");
-    pageIcon.setAttribute("height", "16");
-    pageIcon.setAttribute("width", "16");
-    pageIcon.classList.add("pageInput");
-    pageIcon.innerHTML = `
+        const pageIcon = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+        pageIcon.setAttribute("viewBox", "0 0 16 16");
+        pageIcon.setAttribute("height", "16");
+        pageIcon.setAttribute("width", "16");
+        pageIcon.classList.add("pageInput");
+        pageIcon.innerHTML = `
         <path d="M8.25739 9.1716C7.46696 9.69512 6.51908 10 5.5 10C2.73858 10 0.5 7.76142 0.5 5C0.5
         2.23858 2.73858 0 5.5 0C8.26142 0 10.5 2.23858 10.5 5C10.5 6.01908 10.1951 6.96696 9.67161
         7.75739L11.7071 9.79288C12.0976 10.1834 12.0976 10.8166 11.7071 11.2071C11.3166 11.5976 10.6834
         11.5976 10.2929 11.2071L8.25739 9.1716ZM8.5 5C8.5 6.65685 7.15685 8 5.5 8C3.84315 8 2.5 6.65685
         2.5 5C2.5 3.34315 3.84315 2 5.5 2C7.15685 2 8.5 3.34315 8.5 5Z" transform="translate(3 3)" fill-rule="evenodd" clip-rule="evenodd"></path>`;
 
-    const pageRangeInput = document.createElement('input');
-    pageRangeInput.type = 'range';
-    pageRangeInput.min = '1';
+        const pageRangeInput = document.createElement('input');
+        pageRangeInput.type = 'range';
+        pageRangeInput.min = '1';
 
-    let max = await this.getMaxPage();
-    const stepSize = Math.floor(max / 24);
+        let max = await this.getMaxPage();
+        const stepSize = Math.floor(max / 24);
 
-    console.log(this.getMaxPage());
-    pageRangeInput.max = max || 34;
+        console.log(this.getMaxPage());
+        pageRangeInput.max = max || 34;
 
-    if (this.targetPages > max) {
-        pageRangeInput.value = max;
-        this.targetPages=max;
-    } else {
-        pageRangeInput.value = this.targetPages;
-    }
+        if (this.targetPages > max) {
+            pageRangeInput.value = max;
+            this.targetPages=max;
+        } else {
+            pageRangeInput.value = this.targetPages;
+        }
 
-    pageRangeInput.step = stepSize;
-    pageRangeInput.style.marginRight = '10px';
-    pageRangeInput.classList.add('pageInput');
-    pageRangeInput.addEventListener('input', (event) => {
-        this.targetPages = event.target.value;
-        startButton.textContent = `likes: ${this.likesMinLimit} for ${this.targetPages}Page Go!`;
-    });
+        pageRangeInput.step = stepSize;
+        pageRangeInput.style.marginRight = '10px';
+        pageRangeInput.classList.add('pageInput');
+        pageRangeInput.addEventListener('input', (event) => {
+            this.targetPages = event.target.value;
+            startButton.textContent = `likes: ${this.likesMinLimit} for ${this.targetPages}Page Go!`;
+        });
         container.appendChild(pageIcon);
         container.appendChild(pageRangeInput);
         if(max>50){
@@ -490,7 +500,7 @@ class artScraper {
             });
             container.appendChild(pageInputBox);
         }
-}
+    }
 
     async getMaxPage() {
         if (this.strategy.getArtsCountClass() === null) {
@@ -533,6 +543,16 @@ class artScraper {
 
         const parentElement = await this.getElementOrListBySelector(ParentClass);
         parentElement.appendChild(restoreButton);
+    }
+
+    deleteExtraStartButton(){
+        const startButtons=document.getElementsByClassName("startButton");
+        if(startButtons&&startButtons.length>1){
+            startButtons.forEach(e=>e.remove());
+        }else if(startButtons&&startButtons.length==1)
+        {
+            startButtons[0].remove();
+        }
     }
 
     clearElement(element) {
@@ -617,63 +637,19 @@ class readingStand {
             self.location.href = self.location.href + "/artworks?p=1";
         }
     }
-
-    static checkUrlObserver() {
-        function handleUrlChange(mutationsList, observer) {
-            for (const mutation of mutationsList) {
-                if (mutation.type === 'attributes' && mutation.attributeName === 'href') {
-                    readingStand.expandAllillustrations();
-                }
-            }
-        }
-        const observer = new MutationObserver(handleUrlChange);
-
-        const targetNode = document.querySelector('body');
-        const config = { attributes: true, childList: true, subtree: true };
-
-        observer.observe(targetNode, config);
-
-        readingStand.expandAllillustrations();
-    }
-
-    static checkUrlHistoryAPI() {
-        const originalPushState = history.pushState;
-        const originalReplaceState = history.replaceState;
-
-        function handleHistoryChange() {
-            readingStand.expandAllArtworks();
-        }
-
-        history.pushState = function() {
-            originalPushState.apply(history);
-            handleHistoryChange();
-        };
-
-        history.replaceState = function() {
-            originalReplaceState.apply(history);
-            handleHistoryChange();
-        };
-
-
-        window.addEventListener('popstate', handleHistoryChange);
-        // readingStand.expandAllillustrations();
-    }
 }
 
-readingStand.checkUrlObserver();
-// readingStand.checkUrlHistoryAPI();
-
-let strategy;
-const url=self.location.href;
-if(url.includes('https://www.pixiv.net/bookmark_new_illust.php')){
-    strategy = new subStrategy();
-}else if(url.match(/^https:\/\/www.pixiv.net\/users\/.*\/.*$/)){
-    strategy = new userStrategy();
-}else if(url.match(/^https:\/\/www.pixiv.net\/tags\/.*\/.*$/)){
-    strategy = new tagsStrategy();
-} else {
-    throw new Error('Unsupport page type');
-}
-const johnTheHornyOne = new artScraper(10, 50, strategy);
-johnTheHornyOne.addStartButton(strategy.getButtonAtClass(),strategy.getAllButtonClass()[0])
+//網頁名稱不論載入或AJAX更換頁面都會在過程會觸發1次，hashchange與popstate在此無法正確處理
+const title = document.querySelector('head title');
+const observer = new MutationObserver(function(mutations) {
+    mutations.forEach(function(mutation) {
+        console.log('title changed to "%s"', document.title);
+           readingStand.expandAllArtworks();
+            const johnTheHornyOne = new artScraper(10, 50);
+            johnTheHornyOne.deleteExtraStartButton();
+            johnTheHornyOne.addStartButton(johnTheHornyOne.strategy.getButtonAtClass(), johnTheHornyOne.strategy.getAllButtonClass()[0]);
+    });
+});
+let config = {childList: true,};
+observer.observe(title, config);
 const johnTheRestaurantWaiter = new customMenu();
