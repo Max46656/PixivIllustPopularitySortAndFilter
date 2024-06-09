@@ -596,8 +596,8 @@ class customMenu{
             },
             "ja": {
                 "rowsOfArtsWall": "行設定",
-                "rowsOfArtsWallPrompt": "1 行に何枚の絵画を表示する必要がありますか?(ブラウザの倍率レベルに基づいて決定してください) 現在：",
-                "rowsOfArtsWallMenuError": "数値を入力してください。1 未満にすることはできません",
+                "rowsOfArtsWallPrompt": "1 行に何枚の絵畫を表示する必要がありますか?(ブラウザの倍率レベルに基づいて決定してください) 現在：",
+                "rowsOfArtsWallMenuError": "數値を入力してください。1 未満にすることはできません",
             }
         };
         return display[navigator.language][word];
@@ -610,11 +610,11 @@ class customMenu{
 }
 
 class readingStand {
-    static expandAllillustrations() {
+    static expandAllArtworks() {
         const artistHomePattern = /^https:\/\/www.pixiv.net\/users\/[0-9]*$/;
         const tagHomePattern = /^https:\/\/www.pixiv.net\/tags\/[^\/]+$/;
         if (artistHomePattern.test(self.location.href) || tagHomePattern.test(self.location.href)) {
-            self.location.href = self.location.href + "/artillustrations?p=1";
+            self.location.href = self.location.href + "/artworks?p=1";
         }
     }
 
