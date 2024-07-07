@@ -7,7 +7,7 @@
 // @description:ja  フォローアーティスト作品、アーティスト作品、タグ作品ページで、いいね數でソートし、閾値以上の作品のみを表示します。
 // @description:en  Sort Illustration by likes and display only those above the threshold on followed artist illustrations, artist illustrations, and tag illustrations pages.
 // @namespace    http://tampermonkey.net/
-// @version      1.5.1
+// @version      1.6.3
 // @author       Max
 // @match        https://www.pixiv.net/bookmark_new_illust.php*
 // @match        https://www.pixiv.net/users/*
@@ -18,6 +18,8 @@
 // @grant        GM_setValue
 // @grant        GM_getValue
 // @license MPL2.0
+// @downloadURL https://update.greasyfork.org/scripts/497015/Pixiv%E4%BD%9C%E5%93%81%E7%86%B1%E9%96%80%E7%A8%8B%E5%BA%A6%E6%8E%92%E5%BA%8F%E8%88%87%E7%AF%A9%E9%81%B8%E5%99%A8.user.js
+// @updateURL https://update.greasyfork.org/scripts/497015/Pixiv%E4%BD%9C%E5%93%81%E7%86%B1%E9%96%80%E7%A8%8B%E5%BA%A6%E6%8E%92%E5%BA%8F%E8%88%87%E7%AF%A9%E9%81%B8%E5%99%A8.meta.js
 // ==/UserScript==
 /* TODO
 *提示文字多語言翻譯
@@ -110,9 +112,11 @@ class artScraper {
     constructor(targetPages,likesMinLimit) {
         this.domain = 'https://www.pixiv.net';
         this.allArts = new Set();
+        this.allArtsWithoutLike = [];
         this.targetPages = GM_getValue("targetPages", 10) || targetPages;
         this.likesMinLimit=GM_getValue("likesMinLimit", 50) || likesMinLimit;
         this.strategy = this.setStrategy();
+        this.currentArtCount=0;
         // console.log(strategy.getThumbnailClass(),strategy.getArtsClass(),strategy.getRenderArtWallClass(),strategy.getButtonAtClass(),strategy.getAllButtonClass())
     }
     setStrategy(){
@@ -154,33 +158,36 @@ class artScraper {
         return elements.length > 1 ? elements : elements[0];
     }
 
-    async readingPages(thumbnailClass,artsClass) {
+    async readingPages(thumbnailClass, artsClass) {
         const startTime = performance.now();
         for (let i = 0; i <= this.targetPages; i++) {
-            // console.log(`Iteration ${i + 1}/${this.targetPages}`);
             const iterationStartTime = performance.now();
 
-            //await this.delay(1000);
-            await this.getArtsInPage(thumbnailClass,artsClass);
+            await this.getArtsInPage(thumbnailClass, artsClass);
+
             // 最後一頁的下一頁按鈕為隱藏
-            let allPageNav=document.querySelectorAll("a.sc-xhhh7v-1-filterProps-Styled-Component");
-            if(allPageNav[allPageNav.length-1].hasAttribute("hidden")){
+            let allPageNav = document.querySelectorAll("a.sc-xhhh7v-1-filterProps-Styled-Component");
+            if (allPageNav[allPageNav.length-1].hasAttribute("hidden")) {
                 break;
             }
+            if(this.allArtsWithoutLike.length>=900){
+                await await this.executeAndcountUpSec('fetchLikeOfArtInPage',()=>this.fetchLikeOfArtInPage());
+            }
+
             if (i < this.targetPages - 1) {
                 await this.toNextPage();
             }
 
             const iterationEndTime = performance.now();
         }
+        await await this.executeAndcountUpSec('fetchLikeOfArtInPage',()=>this.fetchLikeOfArtInPage());
     }
 
-    async getArtsInPage(thumbnailClass,artsClass) {
-        let pageStandard=await this.getElementOrListBySelector(artsClass);
-        pageStandard=pageStandard.length;
+    async getArtsInPage(thumbnailClass, artsClass) {
+        let pageStandard = await this.getElementOrListBySelector(artsClass);
+        pageStandard = pageStandard.length-1;
         let thumbnailCount = 0;
         while (thumbnailCount < pageStandard) {
-            // 不能直接getElementOrListBySelector().length，屬性或其他方法鏈不會等待getElementOrListBySelector()的結果，會回傳undefined
             const thumbnails = await this.getElementOrListBySelector(thumbnailClass);
             thumbnailCount = thumbnails.length;
             if (thumbnailCount < pageStandard) {
@@ -193,10 +200,35 @@ class artScraper {
         console.log(`找到${arts.length}張圖片，開始抓取圖片`);
 
         for (let art of arts) {
-            if (!this.allArts.has(art)) {
-                this.allArts.add(art);
-            }
+            this.allArtsWithoutLike.push(art);
         }
+    }
+
+    async fetchLikeOfArtInPage() {
+        const ids = this.allArtsWithoutLike.map(art => {
+            const href = art.getElementsByTagName('a')[0].getAttribute('href');
+            return href.match(/\/(\d+)/)[1];
+        });
+
+        const likeCounts = await Promise.all(ids.map(id => this.getLikeCount(id)));
+
+        likeCounts.forEach((likeCount, index) => {
+            const art = this.allArtsWithoutLike[index];
+            // 檢查是否已經有處理過
+            if (!art.getElementsByClassName('likes').length) {
+                const referenceElement = art.getElementsByTagName('div')[0];
+                if (referenceElement) {
+                    const likeCountElement = document.createElement('span');
+                    likeCountElement.textContent = `${likeCount}`;
+                    likeCountElement.className = 'likes';
+                    likeCountElement.style.cssText = 'text-align: center !important; padding-bottom: 20px !important; color: #0069b1 !important; font-size: 12px !important; font-weight: bold !important; text-decoration: none !important; background-color: #cef !important; background-image: url("data:image/svg+xml;charset=utf8,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%2210%22 height=%2210%22 viewBox=%220 0 12 12%22><path fill=%22%230069B1%22 d=%22M9,1 C10.6568542,1 12,2.34314575 12,4 C12,6.70659075 10.1749287,9.18504759 6.52478604,11.4353705 L6.52478518,11.4353691 C6.20304221,11.6337245 5.79695454,11.6337245 5.4752116,11.4353691 C1.82507053,9.18504652 0,6.70659017 0,4 C1.1324993e-16,2.34314575 1.34314575,1 3,1 C4.12649824,1 5.33911281,1.85202454 6,2.91822994 C6.66088719,1.85202454 7.87350176,1 9,1 Z%22/></svg>") !important; background-position: center left 6px !important; background-repeat: no-repeat !important; padding: 3px 6px 3px 18px !important; border-radius: 3px !important;';
+                    referenceElement.appendChild(likeCountElement);
+                }
+                this.allArts.add({ art, likeCount });
+            }
+        });
+
+        this.allArtsWithoutLike = [];
     }
 
     async toNextPage() {
@@ -213,31 +245,9 @@ class artScraper {
     }
 
     async sortArts() {
-        const ids = [];
-
-        for (let art of this.allArts) {
-            const href = art.getElementsByTagName('a')[0].getAttribute('href');
-            const id = href.match(/\/(\d+)/)[1];
-            ids.push(id);
-        }
-
-        const likeCounts = await Promise.all(ids.map(id => this.getLikeCount(id)));
         const tdData = [];
-        let index = 0;
-        for (let art of this.allArts) {
-            const id = ids[index];
-            const likeCount = likeCounts[index];
-            index++;
+        for (let { art, likeCount } of this.allArts) {
             tdData.push({ art, likeCount });
-
-            const referenceElement = art.getElementsByTagName('div')[0];
-            if (referenceElement) {
-                const likeCountElement = document.createElement('span');
-                likeCountElement.textContent = `${likeCount}`;
-                likeCountElement.className='likes';
-                likeCountElement.style.cssText = 'text-align: center !important; padding-bottom: 20px !important; color: #0069b1 !important; font-size: 12px !important; font-weight: bold !important; text-decoration: none !important; background-color: #cef !important; background-image: url("data:image/svg+xml;charset=utf8,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%2210%22 height=%2210%22 viewBox=%220 0 12 12%22><path fill=%22%230069B1%22 d=%22M9,1 C10.6568542,1 12,2.34314575 12,4 C12,6.70659075 10.1749287,9.18504759 6.52478604,11.4353705 L6.52478518,11.4353691 C6.20304221,11.6337245 5.79695454,11.6337245 5.4752116,11.4353691 C1.82507053,9.18504652 0,6.70659017 0,4 C1.1324993e-16,2.34314575 1.34314575,1 3,1 C4.12649824,1 5.33911281,1.85202454 6,2.91822994 C6.66088719,1.85202454 7.87350176,1 9,1 Z%22/></svg>") !important; background-position: center left 6px !important; background-repeat: no-repeat !important; padding: 3px 6px 3px 18px !important; border-radius: 3px !important;'; // 設置樣式
-                referenceElement.appendChild(likeCountElement);
-            }
         }
         this.allArts = tdData
             .sort((a, b) => b.likeCount - a.likeCount)
@@ -259,8 +269,10 @@ class artScraper {
         table.appendChild(tr);
         let row = GM_getValue("rowsOfArtsWall", 7);
 
+        let artCount = 0; // 計算繪畫數量
+
         for (let art of this.allArts) {
-            if(art.getElementsByClassName('likes')[0].textContent>=this.likesMinLimit){
+            if (art.getElementsByClassName('likes')[0].textContent >= this.likesMinLimit) {
                 const td = document.createElement('td');
 
                 Array.from(art.attributes).forEach(attr => {
@@ -269,6 +281,7 @@ class artScraper {
 
                 td.innerHTML = art.innerHTML;
                 tr.appendChild(td);
+                artCount++; // 增加繪畫數量
 
                 if (tr.children.length % row === 0) {
                     tr = document.createElement('tr');
@@ -277,6 +290,7 @@ class artScraper {
             }
         }
         parentElement.appendChild(fragment);
+        this.currentArtCount = artCount;
     }
 
     // 縮圖換原圖，以其他腳本獨立解決
@@ -380,21 +394,22 @@ class artScraper {
         parentElement.appendChild(buttonContainer);
     }
 
-    async addRerenderButton(renderArtWallAtClass,ParentClass,buttonClass){
+    async addRerenderButton(renderArtWallAtClass, ParentClass, buttonClass) {
         const buttonContainer = document.createElement('div');
         buttonContainer.style.display = 'flex';
         buttonContainer.style.alignItems = 'center';
         buttonContainer.className = 'startButton';
 
         const rerenderButton = document.createElement('button');
-        rerenderButton.textContent = `likes: ${this.likesMinLimit} Rerender Go!`;
+        rerenderButton.textContent = `likes: ${this.likesMinLimit} Rerender Go! now:${this.currentArtCount}(${Math.round(this.currentArtCount/this.allArts.length *100)}％)`; // 顯示目前繪畫數量
         rerenderButton.className = buttonClass;
         rerenderButton.addEventListener('click', async () => {
             GM_setValue("likesMinLimit", this.likesMinLimit);
             await this.renderArtWall(renderArtWallAtClass);
+            rerenderButton.textContent = `likes: ${this.likesMinLimit} Rerender Go! now:${this.currentArtCount}(${Math.round(this.currentArtCount/this.allArts.length *100)}％)`; // 更新繪畫數量
         });
 
-        this.addLikeRangeInput(buttonContainer,rerenderButton);
+        this.addLikeRangeInput(buttonContainer, rerenderButton);
 
         const parentElement = await this.getElementOrListBySelector(ParentClass);
         buttonContainer.appendChild(rerenderButton);
@@ -431,7 +446,7 @@ class artScraper {
         if(document.querySelector('.TableArtWall')){
             likeRangeInput.addEventListener('input', (event) => {
                 this.likesMinLimit = likesMinLimitsRange[event.target.value];
-                Button.textContent = `likes: ${this.likesMinLimit} Rerender Go!`;
+                Button.textContent = `likes: ${this.likesMinLimit} Rerender Go! now:${this.currentArtCount}(${Math.round(this.currentArtCount/this.allArts.length *100)}％)`;
             });
         }else{
             likeRangeInput.addEventListener('input', (event) => {
@@ -644,10 +659,10 @@ const title = document.querySelector('head title');
 const observer = new MutationObserver(function(mutations) {
     mutations.forEach(function(mutation) {
         console.log('title changed to "%s"', document.title);
-           readingStand.expandAllArtworks();
-            const johnTheHornyOne = new artScraper(10, 50);
-            johnTheHornyOne.deleteExtraStartButton();
-            johnTheHornyOne.addStartButton(johnTheHornyOne.strategy.getButtonAtClass(), johnTheHornyOne.strategy.getAllButtonClass()[0]);
+        readingStand.expandAllArtworks();
+        const johnTheHornyOne = new artScraper(10, 50);
+        johnTheHornyOne.deleteExtraStartButton();
+        johnTheHornyOne.addStartButton(johnTheHornyOne.strategy.getButtonAtClass(), johnTheHornyOne.strategy.getAllButtonClass()[0]);
     });
 });
 let config = {childList: true,};
