@@ -7,7 +7,7 @@
 // @description:ja  フォローアーティスト作品、アーティスト作品、タグ作品ページで、いいね數でソートし、閾値以上の作品のみを表示します。
 // @description:en  Sort Illustration by likes and display only those above the threshold on followed artist illustrations, artist illustrations, and tag illustrations pages.
 // @namespace    http://tampermonkey.net/
-// @version      1.6.3
+// @version      1.6.6
 // @author       Max
 // @match        https://www.pixiv.net/bookmark_new_illust.php*
 // @match        https://www.pixiv.net/users/*
@@ -111,7 +111,7 @@ class subStrategy extends pageStrategy{
 class artScraper {
     constructor(targetPages,likesMinLimit) {
         this.domain = 'https://www.pixiv.net';
-        this.allArts = new Set();
+        this.allArts = [];
         this.allArtsWithoutLike = [];
         this.targetPages = GM_getValue("targetPages", 10) || targetPages;
         this.likesMinLimit=GM_getValue("likesMinLimit", 50) || likesMinLimit;
@@ -139,9 +139,9 @@ class artScraper {
         await this.executeAndcountUpSec('sortArts', this.sortArts.bind(this));
         let renderArtWallAtClass = this.strategy.getRenderArtWallClass();
         await this.executeAndcountUpSec('renderArtWall', () => this.renderArtWall(renderArtWallAtClass));
-        this.changeElementClassName(document.querySelector(this.strategy.getOutArtWallWayClass()),'sortArtWall');
+        //this.changeElementClassName(document.querySelector(this.strategy.getOutArtWallWayClass()),'sortArtWall');
         let buttonAtClass = this.strategy.getButtonAtClass();
-        this.addRestoreButton(buttonAtClass, this.strategy.getAllButtonClass()[1]);
+        //this.addRestoreButton(buttonAtClass, this.strategy.getAllButtonClass()[1]);
         this.addRerenderButton(renderArtWallAtClass, buttonAtClass, this.strategy.getAllButtonClass()[2]);
 
         const endTime = performance.now();
@@ -153,13 +153,16 @@ class artScraper {
         while (elements.length == 0) {
             await this.delay(50);
             elements = document.querySelectorAll(selector);
-            console.log("selector",selector,"找不到，將重試")
+            //console.log("selector",selector,"找不到，將重試")
         }
         return elements.length > 1 ? elements : elements[0];
     }
 
     async readingPages(thumbnailClass, artsClass) {
         const startTime = performance.now();
+        if(document.getElementById("RerenderButton")){
+            this.toNextPage();
+        }
         for (let i = 0; i <= this.targetPages; i++) {
             const iterationStartTime = performance.now();
 
@@ -170,9 +173,28 @@ class artScraper {
             if (allPageNav[allPageNav.length-1].hasAttribute("hidden")) {
                 break;
             }
-            if(this.allArtsWithoutLike.length>=900){
-                await await this.executeAndcountUpSec('fetchLikeOfArtInPage',()=>this.fetchLikeOfArtInPage());
+            let takeALook = Math.floor(Math.random() * 10) + 30;
+            let waitTime = Math.floor(Math.random() * 3000) + 2000;
+
+            if(i > 400 && i % takeALook * 10 == 0){
+                console.log("請等待API冷卻時間");
+                await this.delay(waitTime * 10);
+            }else if(i > 40 && i % takeALook == 0){
+                console.log("請等待API冷卻時間");
+                await this.delay(waitTime);
             }
+
+            if(this.allArtsWithoutLike.length>=800){
+                while(this.allArtsWithoutLike.length != 0){
+                    try{
+                        await this.executeAndcountUpSec('appendLikeElementToAllArts',()=>this.appendLikeElementToAllArts());
+                    }catch (e){
+                        console.log("請等待API冷卻時間");
+                        await this.delay(waitTime);
+                    }
+                }
+            }
+
 
             if (i < this.targetPages - 1) {
                 await this.toNextPage();
@@ -180,22 +202,42 @@ class artScraper {
 
             const iterationEndTime = performance.now();
         }
-        await await this.executeAndcountUpSec('fetchLikeOfArtInPage',()=>this.fetchLikeOfArtInPage());
+
+        while(this.allArtsWithoutLike.length != 0){
+            try{
+                await this.executeAndcountUpSec('appendLikeElementToAllArts',()=>this.appendLikeElementToAllArts());
+            }catch (e){
+                console.log("請等待API冷卻時間");
+                await this.delay(Math.floor(Math.random() * 1000));
+            }
+        }
     }
 
     async getArtsInPage(thumbnailClass, artsClass) {
         let pageStandard = await this.getElementOrListBySelector(artsClass);
-        pageStandard = pageStandard.length-1;
+        pageStandard = pageStandard.length - 1;
         let thumbnailCount = 0;
+        let errorCount = 0;
+
         while (thumbnailCount < pageStandard) {
             const thumbnails = await this.getElementOrListBySelector(thumbnailClass);
             thumbnailCount = thumbnails.length;
             if (thumbnailCount < pageStandard) {
+                errorCount++;
                 console.log(`缺少${pageStandard - thumbnailCount}張圖片，請關閉開發者工具且保持視窗在本分頁以確保所有圖片都載入`);
                 window.scrollBy(0, 800);
                 await this.delay(100);
+                if(errorCount % 5==0){
+                    window.scrollBy(0, -5000);
+                }
+                if (errorCount % 30==0) {
+                    console.log("返回上一頁。");
+                    await this.toPervPage();
+                    await this.toNextPage();
+                }
             }
         }
+
         const arts = await this.getElementOrListBySelector(artsClass);
         console.log(`找到${arts.length}張圖片，開始抓取圖片`);
 
@@ -204,18 +246,19 @@ class artScraper {
         }
     }
 
-    async fetchLikeOfArtInPage() {
-        const ids = this.allArtsWithoutLike.map(art => {
+    async appendLikeElementToAllArts() {
+        this.allArtsWithoutLike = this.allArtsWithoutLike.filter(art => art !== undefined);
+        const ids = this.allArtsWithoutLike.filter(art => art.getElementsByTagName('a')[0] !== undefined)
+        .map(art => {
             const href = art.getElementsByTagName('a')[0].getAttribute('href');
             return href.match(/\/(\d+)/)[1];
         });
 
-        const likeCounts = await Promise.all(ids.map(id => this.getLikeCount(id)));
+        const likeCounts = await Promise.all(ids.map(id => this.fetchLikeCount(id)));
 
         likeCounts.forEach((likeCount, index) => {
             const art = this.allArtsWithoutLike[index];
-            // 檢查是否已經有處理過
-            if (!art.getElementsByClassName('likes').length) {
+            if (!art.getElementsByClassName('likes').length) {// 檢查是否已經有處理過
                 const referenceElement = art.getElementsByTagName('div')[0];
                 if (referenceElement) {
                     const likeCountElement = document.createElement('span');
@@ -224,7 +267,7 @@ class artScraper {
                     likeCountElement.style.cssText = 'text-align: center !important; padding-bottom: 20px !important; color: #0069b1 !important; font-size: 12px !important; font-weight: bold !important; text-decoration: none !important; background-color: #cef !important; background-image: url("data:image/svg+xml;charset=utf8,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%2210%22 height=%2210%22 viewBox=%220 0 12 12%22><path fill=%22%230069B1%22 d=%22M9,1 C10.6568542,1 12,2.34314575 12,4 C12,6.70659075 10.1749287,9.18504759 6.52478604,11.4353705 L6.52478518,11.4353691 C6.20304221,11.6337245 5.79695454,11.6337245 5.4752116,11.4353691 C1.82507053,9.18504652 0,6.70659017 0,4 C1.1324993e-16,2.34314575 1.34314575,1 3,1 C4.12649824,1 5.33911281,1.85202454 6,2.91822994 C6.66088719,1.85202454 7.87350176,1 9,1 Z%22/></svg>") !important; background-position: center left 6px !important; background-repeat: no-repeat !important; padding: 3px 6px 3px 18px !important; border-radius: 3px !important;';
                     referenceElement.appendChild(likeCountElement);
                 }
-                this.allArts.add({ art, likeCount });
+                this.allArts.push({ art, likeCount });
             }
         });
 
@@ -238,20 +281,25 @@ class artScraper {
         nextPageButton.click();
     }
 
-    async getLikeCount(id) {
+    async toPervPage() {
+        let pageButtonsClass='a.sc-d98f2c-0.sc-xhhh7v-2.cCkJiq.sc-xhhh7v-1-filterProps-Styled-Component.kKBslM';
+        const pageButtons = document.querySelectorAll(pageButtonsClass);
+        let nextPageButton = pageButtons[0];
+        nextPageButton.click();
+    }
+
+    async fetchLikeCount(id) {
         const response = await fetch(`https://www.pixiv.net/ajax/illust/${id}`, { credentials: 'omit' });
         const json = await response.json();
         return json.body.likeCount;
     }
 
     async sortArts() {
-        const tdData = [];
-        for (let { art, likeCount } of this.allArts) {
-            tdData.push({ art, likeCount });
-        }
-        this.allArts = tdData
-            .sort((a, b) => b.likeCount - a.likeCount)
-            .map(({ art }) => art);
+        this.allArts = Array.from(new Set(this.allArts
+                                          .sort((a, b) => b.likeCount - a.likeCount)
+                                          .map(({ art }) => art)
+                                          .filter(art => art != undefined)
+                                         ));
     }
 
     async renderArtWall(renderArtWallAtClass) {
@@ -372,10 +420,15 @@ class artScraper {
 
     // 拉桿樣式
     async addStartButton(ParentClass,buttonClass) {
+        if(document.getElementById("StartButton"))
+        {
+            return;
+        }
+
         const buttonContainer = document.createElement('nav');
         buttonContainer.style.display = 'flex';
         buttonContainer.style.alignItems = 'center';
-        buttonContainer.className = 'startButton';
+        buttonContainer.id = 'myScriptButtonContainer';
 
         const startButton = document.createElement('button');
         this.addLikeRangeInput(buttonContainer,startButton);
@@ -383,10 +436,12 @@ class artScraper {
 
         startButton.textContent = `likes: ${this.likesMinLimit} for ${this.targetPages}Page Go!`;
         startButton.className = buttonClass;
+        startButton.id = "StartButton";
         startButton.addEventListener('click', async () => {
             GM_setValue("targetPages", this.targetPages);
             GM_setValue("likesMinLimit", this.likesMinLimit);
             await this.eatAllArts();
+            startButton.textContent = `likes: ${this.likesMinLimit} for ${this.targetPages}Page Go!`;
         });
 
         const parentElement = await this.getElementOrListBySelector(ParentClass);
@@ -395,14 +450,23 @@ class artScraper {
     }
 
     async addRerenderButton(renderArtWallAtClass, ParentClass, buttonClass) {
+        if(document.getElementById("RerenderButton")){
+            document.getElementById("RerenderButton").textContent = `likes: ${this.likesMinLimit} Rerender Go! now:${this.currentArtCount}(${Math.round(this.currentArtCount/this.allArts.length *100)}％)`;
+            return;
+        }
+        document.querySelector("nav#myScriptButtonContainer input[id=LikeRangeInput]").style.display="none";
+        document.getElementById("LikeIcon").style.display="none";
+        await this.delay(0);
+        document.getElementById("StartButton").textContent = 'bug? you can try again.';
+
         const buttonContainer = document.createElement('div');
         buttonContainer.style.display = 'flex';
         buttonContainer.style.alignItems = 'center';
-        buttonContainer.className = 'startButton';
 
         const rerenderButton = document.createElement('button');
         rerenderButton.textContent = `likes: ${this.likesMinLimit} Rerender Go! now:${this.currentArtCount}(${Math.round(this.currentArtCount/this.allArts.length *100)}％)`; // 顯示目前繪畫數量
         rerenderButton.className = buttonClass;
+        rerenderButton.id = "RerenderButton";
         rerenderButton.addEventListener('click', async () => {
             GM_setValue("likesMinLimit", this.likesMinLimit);
             await this.renderArtWall(renderArtWallAtClass);
@@ -420,6 +484,7 @@ class artScraper {
         const likesMinLimitsRange = [0, 10, 25, 50, 100, 250, 500, 1000, 2500, 5000, 7500, 10000];
 
         const likeIcon = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+        likeIcon.id="LikeIcon";
         likeIcon.setAttribute("viewBox", "0 0 32 32");
         likeIcon.setAttribute("height", "16");
         likeIcon.setAttribute("width", "16");
@@ -441,7 +506,7 @@ class artScraper {
         likeRangeInput.value = likesMinLimitsRange.indexOf(this.likesMinLimit);
         likeRangeInput.style.marginRight = '10px';
         likeRangeInput.style.backgroundColor = 'red';
-
+        likeRangeInput.id="LikeRangeInput";
         // reRender
         if(document.querySelector('.TableArtWall')){
             likeRangeInput.addEventListener('input', (event) => {
@@ -522,7 +587,7 @@ class artScraper {
             return 34;
         }
         const artsCountElement = await this.getElementOrListBySelector(this.strategy.getArtsCountClass());
-        console.log(artsCountElement);
+        //console.log(artsCountElement);
         if (artsCountElement) {
             // 刪除數字中的逗號
             const artsCountText = artsCountElement.textContent.replace(/,/g, '');
@@ -530,7 +595,7 @@ class artScraper {
             const arts = await this.getElementOrListBySelector(this.strategy.getArtsClass());
             const artsPerPage = arts.length;
             const maxPage = Math.ceil(artsCount / artsPerPage);
-            console.log("artsPerPage", artsPerPage, 'artsCount', artsCount);
+            //console.log("artsPerPage", artsPerPage, 'artsCount', artsCount);
             return maxPage;
         } else {
             return 34;
@@ -538,8 +603,8 @@ class artScraper {
     }
 
     async addRestoreButton(ParentClass,buttonClass) {
-        const startButton = document.querySelector('nav.startButton');
-        this.clearElement(startButton);
+        //const startButton = document.querySelector('nav.startButton');
+        //this.clearElement(startButton);
 
         const restoreButton = document.createElement('button');
         restoreButton.textContent = 'Back to Start';
@@ -560,8 +625,8 @@ class artScraper {
         parentElement.appendChild(restoreButton);
     }
 
-    deleteExtraStartButton(){
-        const startButtons=document.getElementsByClassName("startButton");
+    deleteExtraButton(){
+        const startButtons = document.getElementById("myScriptButtonContainer");
         if(startButtons&&startButtons.length>1){
             startButtons.forEach(e=>e.remove());
         }else if(startButtons&&startButtons.length==1)
@@ -658,10 +723,10 @@ class readingStand {
 const title = document.querySelector('head title');
 const observer = new MutationObserver(function(mutations) {
     mutations.forEach(function(mutation) {
-        console.log('title changed to "%s"', document.title);
+        //console.log('頁面名稱更改為 "%s"', document.title);
         readingStand.expandAllArtworks();
         const johnTheHornyOne = new artScraper(10, 50);
-        johnTheHornyOne.deleteExtraStartButton();
+        johnTheHornyOne.deleteExtraButton();
         johnTheHornyOne.addStartButton(johnTheHornyOne.strategy.getButtonAtClass(), johnTheHornyOne.strategy.getAllButtonClass()[0]);
     });
 });
