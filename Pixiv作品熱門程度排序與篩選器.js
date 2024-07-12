@@ -6,7 +6,7 @@
 // @description  在追蹤繪師作品、繪師作品、標籤作品頁面中以按讚數進行排序，並僅顯示高於閾值的作品。
 // @description:ja  フォローアーティスト作品、アーティスト作品、タグ作品ページで、いいね數でソートし、閾値以上の作品のみを表示します。
 // @description:en  Sort Illustration by likes and display only those above the threshold on followed artist illustrations, artist illustrations, and tag illustrations pages.
-// @namespace    http://tampermonkey.net/
+// @namespace    https://github.com/Max46656
 // @version      1.6.6
 // @author       Max
 // @match        https://www.pixiv.net/bookmark_new_illust.php*
