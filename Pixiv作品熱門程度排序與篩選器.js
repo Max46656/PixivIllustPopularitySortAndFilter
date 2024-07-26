@@ -7,7 +7,7 @@
 // @description:ja  フォローアーティスト作品、アーティスト作品、タグ作品ページで、いいね數でソートし、閾値以上の作品のみを表示します。
 // @description:en  Sort Illustration by likes and display only those above the threshold on followed artist illustrations, artist illustrations, and tag illustrations pages.
 // @namespace    https://github.com/Max46656
-// @version      1.6.6
+// @version      1.6.8
 // @author       Max
 // @match        https://www.pixiv.net/bookmark_new_illust.php*
 // @match        https://www.pixiv.net/users/*
@@ -217,23 +217,19 @@ class artScraper {
         let pageStandard = await this.getElementOrListBySelector(artsClass);
         pageStandard = pageStandard.length - 1;
         let thumbnailCount = 0;
-        let errorCount = 0;
 
         while (thumbnailCount < pageStandard) {
             const thumbnails = await this.getElementOrListBySelector(thumbnailClass);
             thumbnailCount = thumbnails.length;
             if (thumbnailCount < pageStandard) {
-                errorCount++;
                 console.log(`缺少${pageStandard - thumbnailCount}張圖片，請關閉開發者工具且保持視窗在本分頁以確保所有圖片都載入`);
-                window.scrollBy(0, 800);
+                window.scrollBy(0, window.innerHeight);
                 await this.delay(100);
-                if(errorCount % 5==0){
-                    window.scrollBy(0, -5000);
-                }
-                if (errorCount % 30==0) {
-                    console.log("返回上一頁。");
-                    await this.toPervPage();
-                    await this.toNextPage();
+                //滑到頁面底部
+                if(window.innerHeight + window.scrollY >= document.documentElement.scrollHeight){
+                    window.scrollTo(0, 0);
+                    pageStandard = await this.getElementOrListBySelector(artsClass);
+                    pageStandard = pageStandard.length - 1;
                 }
             }
         }
@@ -295,12 +291,26 @@ class artScraper {
     }
 
     async sortArts() {
-        this.allArts = Array.from(new Set(this.allArts
-                                          .sort((a, b) => b.likeCount - a.likeCount)
-                                          .map(({ art }) => art)
-                                          .filter(art => art != undefined)
-                                         ));
+        // 使用 Map 來儲存每個 img src 對應的 art 元素
+        const artMap = new Map();
+
+        // 依據 likeCount 進行排序，並且過濾掉重複的 art
+        this.allArts
+            .sort((a, b) => b.likeCount - a.likeCount) // 依據 likeCount 排序
+            .forEach(({ art }) => {
+            if (art) {
+                const imgSrc = art.getElementsByTagName("img")[0];
+                if (imgSrc && !artMap.has(imgSrc)) {
+                    // 如果 img src 不在 artMap 中，則將 art 存入 artMap
+                    artMap.set(imgSrc, art);
+                }
+            }
+        });
+
+        // 更新 allArts 為排除重複的 art 元素列表
+        this.allArts = Array.from(artMap.values());
     }
+
 
     async renderArtWall(renderArtWallAtClass) {
         const parentElement = await this.getElementOrListBySelector(renderArtWallAtClass);
@@ -625,16 +635,6 @@ class artScraper {
         parentElement.appendChild(restoreButton);
     }
 
-    deleteExtraButton(){
-        const startButtons = document.getElementById("myScriptButtonContainer");
-        if(startButtons&&startButtons.length>1){
-            startButtons.forEach(e=>e.remove());
-        }else if(startButtons&&startButtons.length==1)
-        {
-            startButtons[0].remove();
-        }
-    }
-
     clearElement(element) {
         element.innerHTML='';
     }
@@ -720,16 +720,26 @@ class readingStand {
 }
 
 //網頁名稱不論載入或AJAX更換頁面都會在過程會觸發1次，hashchange與popstate在此無法正確處理
-const title = document.querySelector('head title');
+const title = document.querySelector('title');
+//新增對網頁網址的檢查，以確保即便標題被其他程式修改，腳本仍能意識到是否在相同頁面
+let pageUrl = window.location.href;
+
 const observer = new MutationObserver(function(mutations) {
     mutations.forEach(function(mutation) {
         //console.log('頁面名稱更改為 "%s"', document.title);
         readingStand.expandAllArtworks();
-        const johnTheHornyOne = new artScraper(10, 50);
-        johnTheHornyOne.deleteExtraButton();
+        if (window.location.href === pageUrl) {
+            return;
+        }
+        pageUrl = window.location.href;
+        johnTheHornyOne = new artScraper(10, 50);
         johnTheHornyOne.addStartButton(johnTheHornyOne.strategy.getButtonAtClass(), johnTheHornyOne.strategy.getAllButtonClass()[0]);
     });
 });
 let config = {childList: true,};
 observer.observe(title, config);
+//初始化
+const johnTheHornyOne = new artScraper(10, 50);
+johnTheHornyOne.addStartButton(johnTheHornyOne.strategy.getButtonAtClass(), johnTheHornyOne.strategy.getAllButtonClass()[0]);
+
 const johnTheRestaurantWaiter = new customMenu();
