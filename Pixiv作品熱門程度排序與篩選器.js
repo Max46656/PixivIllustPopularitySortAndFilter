@@ -7,7 +7,7 @@
 // @description:ja  フォローアーティスト作品、アーティスト作品、タグ作品ページで、いいね數でソートし、閾値以上の作品のみを表示します。
 // @description:en  Sort Illustration by likes and display only those above the threshold on followed artist illustrations, artist illustrations, and tag illustrations pages.
 // @namespace    https://github.com/Max46656
-// @version      1.6.8
+// @version      1.6.9
 // @author       Max
 // @match        https://www.pixiv.net/bookmark_new_illust.php*
 // @match        https://www.pixiv.net/users/*
@@ -739,7 +739,7 @@ const observer = new MutationObserver(function(mutations) {
 let config = {childList: true,};
 observer.observe(title, config);
 //初始化
-const johnTheHornyOne = new artScraper(10, 50);
+let johnTheHornyOne = new artScraper(10, 50);
 johnTheHornyOne.addStartButton(johnTheHornyOne.strategy.getButtonAtClass(), johnTheHornyOne.strategy.getAllButtonClass()[0]);
 
 const johnTheRestaurantWaiter = new customMenu();
