@@ -1,3 +1,4 @@
+# 現已將此腳本移至[EverythingInGreasyFork](https://github.com/Max46656/EverythingInGreasyFork/)中管理。
 
 # PixivIllustPopularitySortAndFilter
 Sort Illustration by likes and display only those above the threshold on followed artist illustrations,
